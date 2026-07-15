@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -752,18 +751,27 @@ const ragOpts=[
   });
 })();
 
-/* Governance KPI snapshot */
+/* Governance KPI snapshot (auto-filled from the same live data as the dashboard) */
 (function(){
   const rows=[
-    ['Sessions completed (cumulative)','20 over 14 days'],
-    ['Therapist session quality rating (avg)','4.0 / 5.0 or above'],
-    ['Patient satisfaction score (avg)','4.0 / 5.0 or above'],
-    ['OxeLead data collected and accessible','All sessions']
+    ['Sessions completed (cumulative)','20 over 14 days','gk-sess'],
+    ['Therapist session quality rating (avg)','4.0 / 5.0 or above','gk-ther'],
+    ['Patient satisfaction score (avg)','4.0 / 5.0 or above','gk-sat'],
+    ['OxeLead data collected and accessible','All sessions','gk-data']
   ];
-  let h='<thead><tr><th>Metric</th><th>Target</th><th>This Week</th><th>Status</th></tr></thead><tbody>';
-  rows.forEach((r,i)=>{h+='<tr><td>'+r[0]+'</td><td>'+r[1]+'</td><td><input data-f="govkpi '+i+' week"></td><td><input data-f="govkpi '+i+' status"></td></tr>';});
+  let h='<thead><tr><th>Metric</th><th>Target</th><th>To date</th><th>Status</th></tr></thead><tbody>';
+  rows.forEach(r=>{h+='<tr><td>'+r[0]+'</td><td>'+r[1]+'</td><td><span class="auto" id="'+r[2]+'">—</span></td><td><span class="auto" id="'+r[2]+'-st">—</span></td></tr>';});
   document.getElementById('govKpi').innerHTML=h+'</tbody>';
 })();
+async function refreshGovernance(){
+  const rows=await getRows();
+  const P=rows.filter(r=>r.type==='patient'), T=rows.filter(r=>r.type==='therapist');
+  const satAll=P.map(r=>+r.patientSat).filter(n=>n>0), trAll=T.map(r=>+r.therapistRating).filter(n=>n>0);
+  setTxt('gk-sess',P.length+' / 20'); statusInto('gk-sess-st',P.length>=20);
+  gateInto('gk-ther',trAll); statusInto('gk-ther-st',trAll.length>=MIN_READINGS&&mean(trAll)>=4.0);
+  gateInto('gk-sat',satAll); statusInto('gk-sat-st',satAll.length>=MIN_READINGS&&mean(satAll)>=4.0);
+  setTxt('gk-data',rows.length+' submissions'); statusInto('gk-data-st',rows.length>0);
+}
 /* Governance issues */
 (function(){
   let h='<thead><tr><th>Issue</th><th>Action / Owner</th><th>Target Resolution</th></tr></thead><tbody>';
@@ -789,6 +797,7 @@ function go(id){
   else{appbar.classList.add('showback');document.getElementById('barTitle').textContent=v.dataset.title;document.getElementById('barKicker').textContent=v.dataset.kicker;}
   location.hash=id;
   if(id==='dashboard'&&typeof refreshDashboard==='function')setTimeout(refreshDashboard,20);
+  if(id==='governance'&&typeof refreshGovernance==='function')setTimeout(refreshGovernance,20);
 }
 const PARENT={survey:'home',therapist:'home',corev:'home',dashboard:'corev',governance:'corev'};
 document.getElementById('backBtn').onclick=()=>{const cur=currentHash();go(PARENT[cur]||'home');};
