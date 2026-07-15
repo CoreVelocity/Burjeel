@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -105,6 +106,7 @@ label.lab{display:block;font-weight:600;font-size:14px;margin-bottom:6px}
   width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:10px;background:#fbfcfe;color:var(--ink)
 }
 .field textarea{min-height:80px;resize:vertical}
+.field input.sessauto{background:#eef2f7;color:var(--navy);font-weight:800;letter-spacing:1px}
 .field input:focus,.field textarea:focus,.field select:focus{outline:none;border-color:var(--teal);box-shadow:0 0 0 3px rgba(27,154,170,.15)}
 .grid2{display:grid;grid-template-columns:1fr;gap:12px}
 @media(min-width:520px){.grid2{grid-template-columns:1fr 1fr}}
@@ -286,7 +288,7 @@ td.daycell{background:#f7fafc;font-weight:700;text-align:center;color:var(--navy
       <p class="sub">This survey takes less than one minute. Your feedback helps us make every session better.</p>
       <h2>Session Details</h2>
       <div class="grid3">
-        <div class="field"><label class="lab">Session #</label><input type="text" data-f="Session #" inputmode="numeric"></div>
+        <div class="field"><label class="lab">Session ID</label><input type="text" data-f="Session #" id="sessSurvey" class="sessauto" readonly></div>
         <div class="field"><label class="lab">Date</label><input type="date" data-f="Date"></div>
         <div class="field"><label class="lab">Therapist</label><input type="text" data-f="Therapist"></div>
       </div>
@@ -323,7 +325,7 @@ td.daycell{background:#f7fafc;font-weight:700;text-align:center;color:var(--navy
       <p class="sub">Complete after every session · CoreV | OxeFit MENA</p>
       <h2>Session Details</h2>
       <div class="grid2">
-        <div class="field"><label class="lab">Session #</label><input type="text" data-f="Session #"></div>
+        <div class="field"><label class="lab">Session ID</label><input type="text" data-f="Session #" id="sessTher" class="sessauto" readonly></div>
         <div class="field"><label class="lab">Date</label><input type="date" data-f="Date"></div>
         <div class="field"><label class="lab">Therapist Name</label>
           <select data-f="Therapist Name">
@@ -630,7 +632,7 @@ function logTable(id, days){
     h+='<tr><td class="daycell">'+d.label+'</td>'
       +'<td><span class="auto" id="'+k+'-date">—</span></td>'
       +'<td><span class="auto" id="'+k+'-sess">0</span></td>'
-      +'<td><input type="text" data-f="'+id+' D'+d.idx+' types" placeholder="notes…"></td>'
+      +'<td><span class="auto" id="'+k+'-mod">—</span></td>'
       +'<td><span class="auto" id="'+k+'-tr">—</span></td>'
       +'<td><span class="auto" id="'+k+'-sat">—</span></td>'
       +'<td><input type="text" data-f="'+id+' D'+d.idx+' notes"></td></tr>';
@@ -656,6 +658,13 @@ logTable('week2',[{idx:8,label:'8'},{idx:9,label:'9'},{idx:10,label:'10'},{idx:1
 /* ---------- Aggregation engine: Patient + Therapist submissions -> Dashboard ---------- */
 const APPS_SCRIPT_URL='https://script.google.com/macros/s/AKfycbyPB4q8yG_QDZWAHwd10Ph6gq8TxNyoxJfdByEdhRPlXqo42gFjr00IM9LH4WSX0_h86w/exec';
 const MIN_READINGS=10;
+/* Cumulative Session ID (001, 002 …) shared across Patient & Therapist forms */
+function sessSeq(){try{return parseInt(localStorage.getItem('oxefit_session_seq')||'1',10)||1;}catch(e){return 1;}}
+function setSessSeq(n){try{localStorage.setItem('oxefit_session_seq',String(n));}catch(e){}}
+function fmtSess(n){return String(n).padStart(3,'0');}
+function currentSessionId(){return fmtSess(sessSeq());}
+function updateSessionDisplays(){var v=currentSessionId();var a=document.getElementById('sessSurvey'),b=document.getElementById('sessTher');if(a)a.value=v;if(b)b.value=v;}
+function bumpSession(){setSessSeq(sessSeq()+1);updateSessionDisplays();}
 function localRows(){try{return JSON.parse(localStorage.getItem('oxefit_subs')||'[]');}catch(e){return[];}}
 function logSubmission(rec){try{const a=localRows();a.push(rec);localStorage.setItem('oxefit_subs',JSON.stringify(a));}catch(e){}}
 function metricsFor(id){
@@ -668,7 +677,7 @@ function metricsFor(id){
 function buildRecord(id,fields){
   const now=new Date(); const m=metricsFor(id);
   const dISO=(fields['Date']&&/^\d{4}-\d{2}-\d{2}$/.test(fields['Date']))?fields['Date']:now.toISOString().slice(0,10);
-  return Object.assign({type:id==='survey'?'patient':'therapist',ts:now.toISOString(),date:dISO,therapist:fields['Therapist Name']||fields['Therapist']||'',mrn:fields['Patient MRN']||'',session:fields['Session #']||''},m);
+  return Object.assign({type:id==='survey'?'patient':'therapist',ts:now.toISOString(),date:dISO,therapist:fields['Therapist Name']||fields['Therapist']||'',mrn:fields['Patient MRN']||'',session:fields['Session #']||currentSessionId(),modality:fields['Modality']||''},m);
 }
 function getRows(){
   return new Promise(resolve=>{
@@ -698,7 +707,8 @@ function fillWeek(id,dFrom,dTo,start,rows){
     const dr=rows.filter(r=>r.date===ds);
     const p=dr.filter(r=>r.type==='patient'), th=dr.filter(r=>r.type==='therapist');
     const trv=th.map(r=>+r.therapistRating).filter(n=>n>0), sv=p.map(r=>+r.patientSat).filter(n=>n>0);
-    setTxt(k+'-date',ds||'—'); setTxt(k+'-sess',p.length);
+    const mods=Array.from(new Set(th.map(r=>r.modality).filter(Boolean)));
+    setTxt(k+'-date',ds||'—'); setTxt(k+'-sess',p.length); setTxt(k+'-mod',mods.length?mods.join(', '):'—');
     setTxt(k+'-tr',trv.length?mean(trv).toFixed(2):'—'); setTxt(k+'-sat',sv.length?mean(sv).toFixed(2):'—');
     wS+=p.length; wT=wT.concat(trv); wSa=wSa.concat(sv);
   }
@@ -718,6 +728,9 @@ async function refreshDashboard(){
   setTxt('fk-total',P.length+' / 20'); statusInto('fk-total-st',P.length>=20);
   gateInto('fk-ther',trAll); statusInto('fk-ther-st',trAll.length>=MIN_READINGS&&mean(trAll)>=4.0);
   gateInto('fk-sat',satAll); statusInto('fk-sat-st',satAll.length>=MIN_READINGS&&mean(satAll)>=4.0);
+  // keep the cumulative Session ID ahead of the highest recorded session
+  var maxSess=0; rows.forEach(function(r){var n=parseInt(r.session,10); if(n>maxSess)maxSess=n;});
+  if(maxSess+1>sessSeq()){setSessSeq(maxSess+1);updateSessionDisplays();}
 }
 
 /* Governance RAG */
@@ -810,6 +823,7 @@ document.addEventListener('input',e=>{if(e.target.dataset&&(e.target.dataset.f||
 document.addEventListener('change',e=>{if(e.target.dataset&&e.target.dataset.f!=null)save();});
 load();
 refreshOtherInputs();
+updateSessionDisplays();
 (function(){var ps=document.getElementById('pilotStart');if(ps)ps.addEventListener('change',function(){if(typeof refreshDashboard==='function')refreshDashboard();});})();
 
 /* ---------------- Print ---------------- */
@@ -904,6 +918,7 @@ async function submitToCoreV(id){
       body:JSON.stringify(Object.assign({_subject:subject,_summary:summary},fields))});
     if(res.ok){
       if(btn)btn.textContent='Sent ✓';
+      if(id==='survey')bumpSession(); // advance the cumulative Session ID after each patient survey
       showBanner(id,'ok','Sent to CoreV ✓ — delivered to '+RECIPIENT+'.',true);
       return; // fully silent: no page, no email
     }
@@ -923,6 +938,7 @@ function resetView(id){
   if(typeof refreshOtherInputs==='function')refreshOtherInputs();
   const b=document.querySelector('#'+id+' .btn-share'); if(b){b.disabled=false;b.textContent=b.dataset.orig||'Submit & Send';}
   const el=document.getElementById('send-'+id); if(el)el.classList.remove('show');
+  updateSessionDisplays();
   save(); window.scrollTo(0,0);
 }
 function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),2200);}
