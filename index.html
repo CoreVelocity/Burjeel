@@ -654,7 +654,7 @@ logTable('week2',[{idx:8,label:'8'},{idx:9,label:'9'},{idx:10,label:'10'},{idx:1
 })();
 
 /* ---------- Aggregation engine: Patient + Therapist submissions -> Dashboard ---------- */
-const APPS_SCRIPT_URL='https://script.google.com/macros/s/AKfycbz5ZPNDv3_3-v4kuluIU9cwp00HvMXSk_OKZjCHUSqI3lL0OoxSae8bPEt1F6LbAdNOUg/exec';
+const APPS_SCRIPT_URL='https://script.google.com/macros/s/AKfycbyPB4q8yG_QDZWAHwd10Ph6gq8TxNyoxJfdByEdhRPlXqo42gFjr00IM9LH4WSX0_h86w/exec';
 const MIN_READINGS=10;
 function localRows(){try{return JSON.parse(localStorage.getItem('oxefit_subs')||'[]');}catch(e){return[];}}
 function logSubmission(rec){try{const a=localRows();a.push(rec);localStorage.setItem('oxefit_subs',JSON.stringify(a));}catch(e){}}
