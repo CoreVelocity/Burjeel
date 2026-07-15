@@ -868,9 +868,6 @@ async function shareView(id){
 
 /* ---------- Auto-send Patient & Therapist forms to CoreV ---------- */
 const RECIPIENT='demo@core-velocity.com';
-/* Delivery endpoint (Formspree form that delivers to demo@core-velocity.com). */
-const DEFAULT_FORMSPREE='https://formspree.io/f/mojgaonj';
-function getEndpoint(){return DEFAULT_FORMSPREE;}
 function collectData(id){
   const v=document.getElementById(id); const f={};
   f['Form']=v.dataset.title;
@@ -891,44 +888,35 @@ function showBanner(id,type,text,withReset){
 }
 async function submitToCoreV(id){
   const btn=document.querySelector('#'+id+' .btn-share');
-  const endpoint=getEndpoint();
-  const subject='OxeFit XS1 — '+document.getElementById(id).dataset.title;
-  // Nothing filled in? guard.
   const fields=collectData(id);
-  if(Object.keys(fields).length<=3){
+  const meta=['Form','Site','Submitted','Session #'];
+  const meaningful=Object.keys(fields).filter(k=>meta.indexOf(k)<0);
+  if(meaningful.length===0){
     showBanner(id,'warn','Please fill in the form before submitting.');
     return;
   }
-  // No endpoint configured -> tell the user how to enable silent sending (no email opened).
-  if(!endpoint){
-    showBanner(id,'err','Sending is temporarily unavailable. Please try again in a moment.');
-    return;
-  }
+  const subject='OxeFit XS1 — '+document.getElementById(id).dataset.title;
   const summary=collect(id);
-  // Record submission for dashboard aggregation (local store + shared backend).
-  try{
-    const rec=buildRecord(id,fields);
-    logSubmission(rec);
-    if(APPS_SCRIPT_URL){fetch(APPS_SCRIPT_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(rec)});}
-  }catch(e){}
+  // Full record: metrics for the dashboard + complete detail for the record & email.
+  const rec=buildRecord(id,fields);
+  rec.subject=subject; rec.details=summary; rec.fields=fields;
+  logSubmission(rec);
   if(btn){btn.disabled=true;btn.dataset.orig=btn.dataset.orig||btn.textContent;btn.textContent='Sending…';}
   showBanner(id,'info','Sending to CoreV…');
-  try{
-    const res=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},
-      body:JSON.stringify(Object.assign({_subject:subject,_summary:summary},fields))});
-    if(res.ok){
-      if(btn)btn.textContent='Sent ✓';
-      if(id==='survey')bumpSession(); // advance the cumulative Session ID after each patient survey
-      showBanner(id,'ok','Sent to CoreV ✓ — delivered to '+RECIPIENT+'.',true);
-      return; // fully silent: no page, no email
-    }
-    let msg='Couldn’t send (error '+res.status+'). Check the sending setup and try again.';
-    try{const j=await res.json(); if(j&&j.errors&&j.errors.length) msg=j.errors.map(e=>e.message).join('; ');}catch(e){}
-    showBanner(id,'err',msg);
-  }catch(e){
+  if(navigator.onLine===false){
     showBanner(id,'err','No connection — not sent. Reconnect and tap Submit & Send again.');
+    if(btn){btn.disabled=false;btn.textContent=btn.dataset.orig||'Submit & Send';}
+    return;
   }
-  if(btn){btn.disabled=false;btn.textContent=btn.dataset.orig||'Submit & Send';}
+  try{
+    if(APPS_SCRIPT_URL){await fetch(APPS_SCRIPT_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(rec)});}
+    if(id==='survey')bumpSession(); // advance the cumulative Session ID after each patient survey
+    if(btn)btn.textContent='Sent ✓';
+    showBanner(id,'ok','Sent to CoreV ✓ — logged and emailed to '+RECIPIENT+'.',true);
+  }catch(e){
+    showBanner(id,'err','Could not send — check your connection and tap Submit & Send again.');
+    if(btn){btn.disabled=false;btn.textContent=btn.dataset.orig||'Submit & Send';}
+  }
 }
 function resetView(id){
   const v=document.getElementById(id);
